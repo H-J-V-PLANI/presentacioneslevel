@@ -1,5 +1,8 @@
+import base64
+import html
 import io
 import re
+from pathlib import Path
 
 import requests
 import streamlit as st
@@ -8,9 +11,13 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import MSO_ANCHOR
 from pptx.util import Inches, Pt
 
+BASE_DIR = Path(__file__).resolve().parent
+LOGO_CANDIDATOS = ["logo.png", "logo.jpg", "logo.jpeg", "logo.webp"]
+_LOGO = next((BASE_DIR / n for n in LOGO_CANDIDATOS if (BASE_DIR / n).exists()), None)
+
 st.set_page_config(
     page_title="PLANI PRESENTACION LEVEL",
-    page_icon="🎓",
+    page_icon=str(_LOGO) if _LOGO else "🎓",
     layout="centered",
 )
 
@@ -27,13 +34,9 @@ import hashlib
 import hmac
 import json
 import secrets as pysecrets
-from pathlib import Path
 
 TITULO_APP = "PLANI PRESENTACION LEVEL"
-BASE_DIR = Path(__file__).resolve().parent
 USUARIOS_PATH = BASE_DIR / "usuarios.json"
-LOGO_CANDIDATOS = ["logo.png", "logo.jpg", "logo.jpeg", "logo.webp"]
-
 
 def _hash(password, salt=None):
     salt = salt or pysecrets.token_hex(16)
@@ -97,53 +100,185 @@ def autenticar(usuario, password):
     return reg, None
 
 
-ESTILO_LOGIN = """
+ESTILO_BASE = """
 <style>
-.stApp, [data-testid="stAppViewContainer"] {
-    background: linear-gradient(135deg, #0A2A5E 0%, #0F3F8C 55%, #14509F 100%);
-}
 [data-testid="stHeader"] { background: transparent; }
-[data-testid="stSidebar"] { display: none; }
-.plani-title {
-    color: #FFFFFF; text-align: center; font-size: 2.1rem; font-weight: 800;
-    letter-spacing: .08em; margin: 1.5rem 0 1.8rem;
-}
 [data-testid="stForm"] {
-    background: #FFFFFF; border: none; border-radius: 18px;
-    padding: 2rem 2rem 1.6rem; box-shadow: 0 20px 50px rgba(0,0,0,.35);
+    background: #FFFFFF; border: 1px solid #D9E4F5; border-radius: 18px;
+    padding: 1.6rem 1.8rem 1.4rem; box-shadow: 0 8px 24px rgba(10,42,94,.10);
 }
-[data-testid="stForm"] label p, [data-testid="stForm"] .plani-sub { color: #0A2A5E !important; }
-.plani-sub { text-align: center; font-size: 1rem; margin: .4rem 0 1rem; }
-[data-testid="stForm"] button {
-    background: #0F3F8C; color: #FFFFFF; border: none; font-weight: 700;
+.stButton > button, .stDownloadButton > button,
+[data-testid="stFormSubmitButton"] > button {
+    background: linear-gradient(90deg, #0A2A5E, #1A5BB5); color: #FFFFFF; border: none;
+    border-radius: 10px; font-weight: 700; padding: .55rem 1.3rem;
+    box-shadow: 0 4px 12px rgba(15,63,140,.30);
 }
-[data-testid="stForm"] button:hover { background: #0A2A5E; color: #FFFFFF; }
+.stButton > button p, .stDownloadButton > button p,
+[data-testid="stFormSubmitButton"] > button p { color: #FFFFFF; }
+.stButton > button:hover, .stDownloadButton > button:hover,
+[data-testid="stFormSubmitButton"] > button:hover { filter: brightness(1.18); color: #FFFFFF; }
+.stButton > button:disabled { opacity: .45; }
 .plani-logo-ph {
     width: 110px; height: 110px; margin: 0 auto; border-radius: 50%;
-    background: #0F3F8C; color: #FFFFFF; font-weight: 800; font-size: 1.4rem;
+    background: #0F3F8C; color: #D4AF37; font-weight: 800; font-size: 1.4rem;
     display: flex; align-items: center; justify-content: center;
 }
 </style>
 """
 
+ESTILO_LOGIN = """
+<style>
+.stApp, [data-testid="stAppViewContainer"] {
+    background:
+        radial-gradient(circle at 12% 8%, rgba(26,91,181,.75) 0%, rgba(26,91,181,0) 42%),
+        radial-gradient(circle at 90% 95%, rgba(212,175,55,.18) 0%, rgba(212,175,55,0) 35%),
+        linear-gradient(135deg, #071F47 0%, #0A2A5E 45%, #0F3F8C 100%);
+}
+[data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"] { display: none; }
+.block-container { max-width: 520px !important; padding-top: 3rem; }
+.plani-title {
+    color: #FFFFFF; text-align: center; font-weight: 800; letter-spacing: .08em;
+    font-size: clamp(1.3rem, 5vw, 1.8rem); margin: .5rem 0 .2rem;
+}
+.plani-title::after {
+    content: ""; display: block; width: 72px; height: 3px; background: #D4AF37;
+    margin: .7rem auto 0; border-radius: 2px;
+}
+.plani-tag { color: #BFD3F2; text-align: center; margin: .6rem 0 1.5rem; font-size: .95rem; }
+.plani-badge {
+    background: linear-gradient(135deg, #071F47, #0F3F8C); border-radius: 16px;
+    padding: 18px; text-align: center; margin-bottom: 14px;
+    border-bottom: 3px solid #D4AF37;
+}
+.plani-badge img { height: 130px; width: auto; }
+.plani-sub { text-align: center; color: #0A2A5E; font-weight: 600; margin: .2rem 0 1rem; }
+[data-testid="stForm"] { border: none; box-shadow: 0 24px 60px rgba(0,0,0,.40); }
+[data-testid="stForm"] label p { color: #0A2A5E; font-weight: 600; }
+</style>
+"""
 
-def _logo():
+ESTILO_APP = """
+<style>
+.stApp { background: #EEF3FA; }
+.block-container { max-width: 1100px !important; padding-top: 1.5rem; }
+h1, h2, h3, h4 { color: #0A2A5E; }
+
+/* Barra lateral */
+[data-testid="stSidebar"] { background: linear-gradient(180deg, #071F47 0%, #0F3F8C 100%); }
+[data-testid="stSidebar"] * { color: #FFFFFF; }
+[data-testid="stSidebar"] input { color: #0A2A5E !important; -webkit-text-fill-color: #0A2A5E; }
+[data-testid="stSidebar"] [data-testid="stAlert"] * { color: #0A2A5E !important; }
+[data-testid="stSidebar"] [data-testid="stForm"] {
+    background: transparent; border: none; box-shadow: none; padding: 0;
+}
+[data-testid="stSidebar"] .stButton > button,
+[data-testid="stSidebar"] [data-testid="stFormSubmitButton"] > button {
+    background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.55);
+    box-shadow: none; width: 100%;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] {
+    border: 1px solid rgba(255,255,255,.25); border-radius: 12px;
+}
+.plani-user {
+    display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 12px;
+    background: rgba(255,255,255,.10); border-radius: 14px; border-left: 4px solid #D4AF37;
+}
+.plani-avatar {
+    width: 42px; height: 42px; border-radius: 50%; background: #D4AF37; color: #0A2A5E !important;
+    font-weight: 800; font-size: 1.2rem; display: flex; align-items: center; justify-content: center;
+    flex: 0 0 auto;
+}
+.plani-user b { display: block; line-height: 1.2; }
+.plani-user span { font-size: .8rem; color: #BFD3F2; }
+
+/* Banner superior */
+.plani-banner {
+    display: flex; align-items: center; gap: 22px; margin-bottom: 1.1rem;
+    padding: 14px 26px; border-radius: 20px; border-bottom: 4px solid #D4AF37;
+    background: linear-gradient(120deg, #071F47 0%, #0A2A5E 40%, #1A5BB5 100%);
+    box-shadow: 0 10px 28px rgba(10,42,94,.28);
+}
+.plani-banner img { height: 78px; width: auto; flex: 0 0 auto; }
+.plani-banner .t {
+    color: #FFFFFF; font-weight: 800; letter-spacing: .07em; line-height: 1.2;
+    font-size: clamp(1.1rem, 3.2vw, 1.7rem);
+}
+.plani-banner .s { color: #BFD3F2; margin-top: .25rem; font-size: .92rem; }
+
+/* Pestañas */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px; background: #FFFFFF; padding: 6px; border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(10,42,94,.08);
+}
+.stTabs [data-baseweb="tab"] { border-radius: 10px; padding: 8px 18px; height: auto; }
+.stTabs [data-baseweb="tab"] p { color: #0A2A5E; font-weight: 600; }
+.stTabs [aria-selected="true"] { background: #0F3F8C; }
+.stTabs [aria-selected="true"] p { color: #FFFFFF; }
+.stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] { display: none; }
+
+/* Tarjetas de estadísticas */
+.plani-stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 14px; margin: .6rem 0 1.2rem;
+}
+.plani-stat {
+    background: #FFFFFF; border-radius: 16px; padding: 16px 18px;
+    border-left: 5px solid #0F3F8C; box-shadow: 0 4px 14px rgba(10,42,94,.09);
+}
+.plani-stat b { display: block; font-size: 2rem; line-height: 1.1; color: #0A2A5E; }
+.plani-stat span { color: #5A6F94; font-size: .78rem; text-transform: uppercase; letter-spacing: .07em; }
+.plani-stat.ok { border-left-color: #1E9E6A; }
+.plani-stat.warn { border-left-color: #E0A100; }
+.plani-stat.bad { border-left-color: #D64545; }
+
+/* Encabezado del generador */
+.plani-hero {
+    background: #FFFFFF; border-radius: 16px; padding: 1rem 1.4rem; margin-bottom: 1rem;
+    border-left: 6px solid #D4AF37; box-shadow: 0 4px 14px rgba(10,42,94,.09);
+}
+.plani-hero b { color: #0A2A5E; font-size: 1.25rem; }
+.plani-hero p { margin: .3rem 0 0; color: #4A5F85; }
+</style>
+"""
+
+
+def _logo_b64():
     for nombre in LOGO_CANDIDATOS:
         ruta = BASE_DIR / nombre
         if ruta.exists():
-            c = st.columns([1, 2, 1])
-            c[1].image(str(ruta), use_container_width=True)
-            return
-    st.markdown('<div class="plani-logo-ph">PLANI</div>', unsafe_allow_html=True)
+            try:
+                from PIL import Image
+                im = Image.open(ruta).convert("RGBA")
+                im.thumbnail((400, 400))
+                buf = io.BytesIO()
+                im.save(buf, "PNG")
+                return base64.b64encode(buf.getvalue()).decode()
+            except Exception:
+                return None
+    return None
+
+
+_logo_b64 = st.cache_resource(show_spinner=False)(_logo_b64)
+
+
+def _logo_html():
+    b64 = _logo_b64()
+    if b64:
+        return f'<img src="data:image/png;base64,{b64}" alt="PLANI">'
+    return '<div class="plani-logo-ph">PLANI</div>'
 
 
 def pantalla_login():
-    st.markdown(ESTILO_LOGIN, unsafe_allow_html=True)
+    st.markdown(ESTILO_BASE + ESTILO_LOGIN, unsafe_allow_html=True)
     st.markdown(f'<div class="plani-title">{TITULO_APP}</div>', unsafe_allow_html=True)
+    st.markdown('<div class="plani-tag">Generador de presentaciones educativas</div>',
+                unsafe_allow_html=True)
     with st.form("login_form"):
-        _logo()
-        st.markdown('<div class="plani-sub">Inicia sesión para continuar</div>',
-                    unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="plani-badge">{_logo_html()}</div>'
+            '<div class="plani-sub">Inicia sesión para continuar</div>',
+            unsafe_allow_html=True,
+        )
         user = st.text_input("Usuario")
         password = st.text_input("Contraseña", type="password")
         entrar = st.form_submit_button("Ingresar", use_container_width=True)
@@ -159,6 +294,39 @@ def pantalla_login():
                 nombre=reg.get("nombre") or user.strip(),
             )
             st.rerun()
+
+
+def banner():
+    st.markdown(
+        f'<div class="plani-banner">{_logo_html()}<div>'
+        f'<div class="t">{TITULO_APP}</div>'
+        '<div class="s">Generador de presentaciones educativas con información real</div>'
+        '</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def sidebar_usuario():
+    nombre = str(st.session_state.get("nombre") or st.session_state.usuario)
+    rol = "Administrador" if st.session_state.get("rol") == "admin" else "Usuario"
+    st.sidebar.markdown(
+        f'<div class="plani-user"><div class="plani-avatar">{html.escape(nombre[:1].upper())}</div>'
+        f'<div><b>{html.escape(nombre)}</b><span>{rol}</span></div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def estado_usuario(reg):
+    if not reg.get("activo", True):
+        return "Desactivado"
+    v = reg.get("vence")
+    if v:
+        dias = (dt.date.fromisoformat(v) - dt.date.today()).days
+        if dias < 0:
+            return "Vencido"
+        if dias <= 7:
+            return "Por vencer"
+    return "Activo"
 
 
 def _es_ultimo_admin(usuarios, usuario):
@@ -196,6 +364,18 @@ def panel_admin():
             "Estás usando la contraseña inicial del administrador. "
             "Cámbiala en el menú lateral (🔑 Cambiar mi contraseña)."
         )
+
+    # ---- Resumen ----
+    estados = [estado_usuario(r) for r in usuarios.values()]
+    st.markdown(
+        '<div class="plani-stats">'
+        f'<div class="plani-stat"><b>{len(estados)}</b><span>Usuarios totales</span></div>'
+        f'<div class="plani-stat ok"><b>{estados.count("Activo") + estados.count("Por vencer")}</b><span>Con acceso</span></div>'
+        f'<div class="plani-stat warn"><b>{estados.count("Por vencer")}</b><span>Vencen en 7 días</span></div>'
+        f'<div class="plani-stat bad"><b>{estados.count("Vencido") + estados.count("Desactivado")}</b><span>Vencidos o desactivados</span></div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
     # ---- Crear usuario ----
     st.subheader("➕ Crear usuario")
@@ -236,7 +416,7 @@ def panel_admin():
                 "Usuario": u,
                 "Nombre": r.get("nombre", ""),
                 "Rol": r["rol"],
-                "Estado": "Activo" if r.get("activo", True) else "Desactivado",
+                "Estado": estado_usuario(r),
                 "Vence": r.get("vence") or "Sin vencimiento",
                 "Creado": r.get("creado", ""),
             }
@@ -658,10 +838,11 @@ def construir_pptx(tema, slides, fuentes, portada, incluir_yt):
 #  INTERFAZ
 # =====================================================================
 def pantalla_generador():
-    st.title("🎓 Generador de Presentaciones con Información Real")
-    st.write(
-        "Escribe un tema y la app reunirá información verificable de varias fuentes, "
-        "con imágenes relacionadas y una diapositiva de referencias."
+    st.markdown(
+        '<div class="plani-hero"><b>🎓 Crea tu presentación</b>'
+        "<p>Escribe un tema y la app reunirá información verificable de varias fuentes, "
+        "con imágenes relacionadas y una diapositiva de referencias.</p></div>",
+        unsafe_allow_html=True,
     )
 
     with st.form("form_presentacion"):
@@ -704,8 +885,10 @@ if not st.session_state.get("autenticado"):
     pantalla_login()
     st.stop()
 
-st.sidebar.success(f"Conectado como: **{st.session_state.get('nombre') or st.session_state.usuario}**")
-if st.sidebar.button("Cerrar Sesión"):
+st.markdown(ESTILO_BASE + ESTILO_APP, unsafe_allow_html=True)
+banner()
+sidebar_usuario()
+if st.sidebar.button("Cerrar sesión"):
     for k in ("autenticado", "usuario", "rol", "nombre"):
         st.session_state.pop(k, None)
     st.rerun()
