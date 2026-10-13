@@ -5,137 +5,117 @@ import urllib.request
 import urllib.parse
 import requests
 import streamlit as st
+from bs4 import BeautifulSoup # Necesitarás: pip install beautifulsoup4
 from pptx import Presentation
 from pptx.util import Inches, Pt
 
-# Configuración de la interfaz web
-st.set_page_config(
-    page_title="Generador Profesional de Presentaciones",
-    page_icon="🎓",
-    layout="centered",
-)
+# ... (Mantén tu sistema de login y configuración inicial igual que antes) ...
 
-# --- SISTEMA DE LOGIN SENCILLO ---
-CREDENCIALES = {"profesor": "profe2026", "estudiante": "clase2026"}
-
-if "autenticado" not in st.session_state:
-    st.session_state.autenticado = False
-
-if not st.session_state.autenticado:
-    st.title("🔐 Acceso a la Plataforma Educativa")
-    st.write("Inicia sesión para generar tus presentaciones y recursos didácticos.")
-
-    with st.form("login_form"):
-        user = st.text_input("Usuario")
-        password = st.text_input("Contraseña", type="password")
-        entrar = st.form_submit_button("Ingresar")
-
-        if entrar:
-            if user in CREDENCIALES and CREDENCIALES[user] == password:
-                st.session_state.autenticado = True
-                st.session_state.usuario = user
-                st.rerun()
-            else:
-                st.error("Usuario o contraseña incorrectos.")
-    st.stop()
-
-# --- APLICACIÓN PRINCIPAL ---
-st.sidebar.success(f"Conectado como: **{st.session_state.usuario}**")
-if st.sidebar.button("Cerrar Sesión"):
-    st.session_state.autenticado = False
-    st.rerun()
-
-st.title("🎓 Generador Universal de Presentaciones Académicas")
-st.write(
-    "Escribe **cualquier tema, asignatura o concepto** y la app buscará "
-    "información real en internet para estructurar una presentación con "
-    "datos veraces, imágenes ilustrativas y enlaces educativos."
-)
-
-with st.form("form_presentacion"):
-    tema = st.text_input(
-        "¿Sobre qué tema, asignatura o concepto deseas la presentación?",
-        "La Inteligencia Artificial",
-    )
-    col1, col2 = st.columns(2)
-    with col1:
-        num_slides = st.slider("Número de diapositivas", min_value=3, max_value=8, value=4)
-    with col2:
-        incluir_yt = st.checkbox("Incluir enlaces de videos de YouTube", value=True)
-
-    generar_btn = st.form_submit_button("🚀 Generar y Descargar Presentación")
-
-
-# --- MOTOR DE BÚSQUEDA Y GENERACIÓN DE CONTENIDO REAL ---
-def buscar_info_wikipedia(query):
-    """Busca información resumida e imagen en Wikipedia de forma gratuita."""
-    url = f"https://es.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(query)}"
+# --- MOTOR DE BÚSQUEDA MODULAR ---
+def obtener_info_duckduckgo(query):
+    """Busca resúmenes rápidos sin API Key usando DuckDuckGo."""
+    url = f"https://api.duckduckgo.com/?q={urllib.parse.quote(query)}&format=json&no_html=1&skip_disambig=1"
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'GeneradorPresentaciones/1.0'})
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=5) as response:
             data = json.loads(response.read().decode())
+            extracto = data.get('AbstractText', '')
+            imagen = data.get('Image', '')
+            
+            if not extracto:
+                return {'titulo': query, 'extracto': 'No se encontró resumen rápido.', 'imagen_url': None}
+            
             return {
-                'titulo': data.get('title', query),
-                'extracto': data.get('extract', 'Información no disponible en este subtema.'),
-                'imagen_url': data.get('thumbnail', {}).get('source')
+                'titulo': data.get('Heading', query),
+                'extracto': extracto,
+                'imagen_url': imagen if imagen.startswith('http') else None
             }
     except Exception:
-        return {'titulo': query, 'extracto': 'No se encontró información específica en fuentes abiertas.', 'imagen_url': None}
+        return {'titulo': query, 'extracto': 'Error al consultar DuckDuckGo.', 'imagen_url': None}
 
 
-def generar_contenido_unico(query, total_slides):
+def obtener_info_por_url(url_objetivo):
+    """Extrae el texto principal de una página web específica (Scraping)."""
+    try:
+        req = urllib.request.Request(url_objetivo, headers={'User-Agent': 'Mozilla/5.0'})
+        html = urllib.request.urlopen(req, timeout=5).read()
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        # Extrae todos los párrafos y los une (puedes ajustar los selectores según la web)
+        parrafos = [p.get_text().strip() for p in soup.find_all('p') if len(p.get_text()) > 50]
+        texto_completo = "\n\n".join(parrafos[:5]) # Limita a los primeros 5 párrafos para no saturar
+        
+        return {
+            'titulo': soup.title.string if soup.title else "Contenido Web",
+            'extracto': texto_completo,
+            'imagen_url': None
+        }
+    except Exception as e:
+        return {'titulo': 'Error', 'extracto': f'No se pudo leer la URL: {e}', 'imagen_url': None}
+
+
+def generar_contenido_unico(query, total_slides, fuente="duckduckgo", url_personalizada=None):
     slides = []
-    
-    # Subtemas dinámicos para enriquecer la búsqueda y evitar repetición
     subtemas = [
-        f"{query} introducción",
-        f"{query} historia fundamentos",
-        f"{query} aplicaciones practicas",
-        f"{query} ventajas beneficios",
-        f"{query} retos desafios",
-        f"{query} futuro tendencias",
-        f"{query} metodologia",
-        f"{query} casos de estudio"
+        query,
+        f"{query} historia",
+        f"{query} aplicaciones",
+        f"{query} ventajas",
+        f"{query} desafios",
+        f"{query} futuro"
     ]
     
     for i in range(total_slides):
         subtema = subtemas[i % len(subtemas)]
-        info = buscar_info_wikipedia(subtema)
         
-        # Si el extracto es muy corto, buscamos el tema general como respaldo
-        if len(info['extracto']) < 150:
-            info = buscar_info_wikipedia(query)
-            
-        # Limpieza y formato del título
-        titulo_limpio = info['titulo'].replace(query, "").strip().strip(":")
-        if not titulo_limpio or titulo_limpio.lower() == query.lower():
-            titulo = f"Aspectos Clave: {query}" if i > 0 else f"Introducción a {query}"
-        else:
-            titulo = f"{i+1}. {titulo_limpio}"
-            
+        # --- AQUÍ SE ELIGE LA FUENTE ---
+        if fuente == "url" and url_personalizada:
+            info = obtener_info_por_url(url_personalizada)
+        elif fuente == "duckduckgo":
+            info = obtener_info_duckduckgo(subtema)
+        else: # Fallback a Wikipedia si todo lo demás falla
+            url_wiki = f"https://es.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(subtema)}"
+            try:
+                req = urllib.request.Request(url_wiki, headers={'User-Agent': 'App/1.0'})
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    data = json.loads(response.read().decode())
+                    info = {
+                        'titulo': data.get('title', subtema),
+                        'extracto': data.get('extract', 'Sin información.'),
+                        'imagen_url': data.get('thumbnail', {}).get('source')
+                    }
+            except Exception:
+                info = {'titulo': subtema, 'extracto': 'Información no disponible.', 'imagen_url': None}
+
         slides.append({
-            'titulo': titulo,
+            'titulo': f"{i+1}. {info['titulo']}" if i > 0 else f"Introducción: {info['titulo']}",
             'texto': info['extracto'],
             'imagen_url': info['imagen_url']
         })
 
-    # Enlaces de YouTube optimizados para contenido educativo
-    busqueda_url = urllib.parse.quote(query)
-    videos = [
-        {
-            "titulo": f"Clase magistral y explicación detallada: {query}",
-            "url": f"https://www.youtube.com/results?search_query={busqueda_url}+clase+magistral+educativa"
-        },
-        {
-            "titulo": f"Guía práctica, tutoriales y ejemplos visuales: {query}",
-            "url": f"https://www.youtube.com/results?search_query={busqueda_url}+explicacion+facil+ejemplos"
-        },
-    ]
+    return slides
+
+
+# --- INTERFAZ DE STREAMLIT ACTUALIZADA ---
+st.title("🎓 Generador Universal de Presentaciones (Multi-Fuente)")
+
+with st.form("form_presentacion"):
+    tema = st.text_input("Tema de la presentación", "Energía Renovable")
     
-    return slides, videos
+    # ¡NUEVO! Selector de fuente de información
+    fuente_seleccionada = st.radio(
+        "¿De dónde quieres obtener la información?",
+        options=["DuckDuckGo (Rápido y sin claves)", "Wikipedia (Estable y detallado)", "URL Personalizada (Scraping)"],
+        index=0
+    )
+    
+    url_personalizada = ""
+    if fuente_seleccionada == "URL Personalizada (Scraping)":
+        url_personalizada = st.text_input("Pega la URL del artículo o página web:", "https://ejemplo.com/articulo-educativo")
 
+    num_slides = st.slider("Número de diapositivas", min_value=3, max_value=8, value=4)
+    generar_btn = st.form_submit_button("🚀 Generar Presentación")
 
-# --- GENERACIÓN DEL ARCHIVO POWERPOINT ---
 if generar_btn:
     if not tema.strip():
         st.warning("Por favor, escribe un tema válido.")
@@ -144,70 +124,56 @@ if generar_btn:
         estado = st.empty()
 
         try:
-            estado.text(f"🔍 Buscando información real y verificada sobre '{tema}'...")
+            estado.text(f"🔍 Buscando en {fuente_seleccionada}...")
             barra.progress(30)
             
-            contenido_slides, lista_videos = generar_contenido_unico(tema, num_slides)
+            # Mapeo de la selección del usuario a la lógica del código
+            if "DuckDuckGo" in fuente_seleccionada:
+                fuente_codigo = "duckduckgo"
+            elif "URL" in fuente_seleccionada:
+                fuente_codigo = "url"
+            else:
+                fuente_codigo = "wikipedia"
+                
+            contenido_slides = generar_contenido_unico(tema, num_slides, fuente=fuente_codigo, url_personalizada=url_personalizada)
 
-            estado.text("📊 Compilando archivo PowerPoint con diseño optimizado...")
-            barra.progress(60)
+            estado.text("📊 Creando diapositivas...")
+            barra.progress(70)
 
             prs = Presentation()
-
             for slide_info in contenido_slides:
                 slide = prs.slides.add_slide(prs.slide_layouts[1])
                 slide.shapes.title.text = slide_info['titulo']
-                
-                # Insertar texto con ajuste de palabra
                 tf = slide.placeholders[1].text_frame
                 tf.text = slide_info['texto']
                 tf.word_wrap = True
 
-                # --- LÓGICA DE IMÁGENES INTELIGENTE ---
+                # Lógica de imagen (usa la de la fuente o genera una con IA si está vacía)
                 img_url = slide_info['imagen_url']
                 if not img_url:
-                    # Fallback: Generador de imágenes IA gratuito y sin API Key (Pollinations)
-                    tema_img = urllib.parse.quote(tema)
-                    img_url = f"https://image.pollinations.ai/prompt/{tema_img}%20educational%20presentation%20professional?width=600&height=400&nologo=true"
+                    img_url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(tema)}%20educational?width=600&height=400&nologo=true"
                 
                 try:
                     resp_img = requests.get(img_url, timeout=8)
                     if resp_img.status_code == 200:
-                        image_stream = io.BytesIO(resp_img.content)
-                        # Posición: lado derecho, equilibrado con el texto
-                        left = Inches(5.8)
-                        top = Inches(2.2)
-                        width = Inches(3.5)
-                        slide.shapes.add_picture(image_stream, left, top, width=width)
+                        slide.shapes.add_picture(io.BytesIO(resp_img.content), Inches(5.8), Inches(2.2), width=Inches(3.5))
                 except Exception:
-                    pass  # Si falla la imagen, la diapositiva se mantiene limpia solo con texto
-
-            # Diapositiva final con enlaces directos a YouTube
-            if incluir_yt and lista_videos:
-                slide_yt = prs.slides.add_slide(prs.slide_layouts[1])
-                slide_yt.shapes.title.text = "🎥 Recursos y Videos en YouTube"
-                detalle_yt = "Enlaces directos recomendados para profundizar en la clase:\n\n"
-                for v in lista_videos:
-                    detalle_yt += f"• {v['titulo']}\n  🔗 {v['url']}\n\n"
-                slide_yt.placeholders[1].text = detalle_yt
+                    pass
 
             barra.progress(100)
-            estado.text("¡Completado con éxito!")
-
             archivo_salida = f"presentacion_{os.getpid()}.pptx"
             prs.save(archivo_salida)
 
             with open(archivo_salida, "rb") as f:
-                st.success("🎉 ¡Tu presentación profesional está lista con **contenido real de internet**!")
+                st.success("🎉 ¡Presentación generada con éxito!")
                 st.download_button(
-                    label="📥 Descargar Presentación (.pptx)",
+                    label="📥 Descargar .pptx",
                     data=f,
                     file_name=f"{tema.replace(' ', '_')}.pptx",
                     mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 )
-
             if os.path.exists(archivo_salida):
                 os.remove(archivo_salida)
 
         except Exception as err:
-            st.error(f"Ocurrió un error durante la generación: {err}")
+            st.error(f"Error: {err}")
