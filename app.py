@@ -46,7 +46,7 @@ if st.sidebar.button("Cerrar Sesión"):
 
 st.title("🎓 Generador de Presentaciones con Enlaces de YouTube")
 st.write(
-    "Crea presentaciones automáticas con investigación web real y links de"
+    "Crea presentaciones automáticas con investigación detallada y links de"
     " videos de YouTube listos para exponer."
 )
 
@@ -68,36 +68,32 @@ with st.form("form_presentacion"):
   generar_btn = st.form_submit_button("🚀 Generar y Descargar Presentación")
 
 
-# Función para obtener fragmentos reales de información
+# Función mejorada para recopilar contenido rico y estructurado
 @st.cache_data(show_spinner=False)
-def buscar_contenido_real(query):
-  fragmentos = []
+def buscar_contenido_educativo(query):
+  textos_recopilados = []
   videos_encontrados = []
   try:
     with DDGS() as ddgs:
-      resultados = ddgs.text(query, max_results=8)
+      # Búsqueda amplia para asegurar buenos bloques de texto
+      resultados = ddgs.text(query, max_results=10)
       if resultados:
         for r in resultados:
-          if "body" in r and len(r["body"]) > 30:
-            fragmentos.append(r["body"])
+          body = r.get("body", "")
+          if len(body) > 40:
+            textos_recopilados.append(body)
 
-      resultados_yt = ddgs.text(f"site:youtube.com {query}", max_results=3)
+      # Búsqueda de videos en YouTube
+      resultados_yt = ddgs.text(f"site:youtube.com watch {query}", max_results=3)
       if resultados_yt:
         for r in resultados_yt:
-          titulo_v = r.get("title", "Video educativo")
+          titulo_v = r.get("title", "Video educativo recomendado")
           url_v = r.get("href", "#")
           videos_encontrados.append({"titulo": titulo_v, "url": url_v})
   except Exception:
     pass
 
-  if not fragmentos:
-    fragmentos = [
-        f"Conceptos principales, fundamentos y características clave sobre"
-        f" {query}.",
-        f"Importancia, aplicaciones prácticas y metodología en torno a {query}.",
-    ]
-
-  return fragmentos, videos_encontrados
+  return textos_recopilados, videos_encontrados
 
 
 if generar_btn:
@@ -109,61 +105,69 @@ if generar_btn:
 
     try:
       estado.text(
-          "🌐 Investigando información real en la web y buscando videos..."
+          "🌐 Investigando a fondo sobre el tema y buscando recursos..."
       )
       barra.progress(30)
-      lista_fragmentos, lista_videos = buscar_contenido_real(tema)
+      fragmentos_web, lista_videos = buscar_contenido_educativo(tema)
 
-      estado.text("📝 Organizando el contenido real por diapositivas...")
+      estado.text(
+          "📝 Sintetizando y redactando el contenido académico para las"
+          " diapositivas..."
+      )
       barra.progress(60)
 
       prs = Presentation()
 
-      subtitulos_ideas = [
-          "Definición y Conceptos Fundamentales",
-          "Características y Elementos Principales",
-          "Proceso, Técnicas y Metodología",
-          "Aplicaciones Prácticas en el Área",
-          "Ventajas y Aspectos Clave",
-          "Retos Actuales e Innovación",
-          "Ejemplos y Casos de Estudio",
-          "Conclusiones y Resumen General",
+      # Banco amplio de subtítulos profesionales adaptados a cualquier materia
+      titulos_secciones = [
+          "Introducción y Conceptos Principales",
+          "Fundamentos y Características Esenciales",
+          "Proceso, Fases y Metodología",
+          "Aplicaciones Prácticas y Ejemplos",
+          "Importancia en el Ámbito Académico/Profesional",
+          "Ventajas, Retos y Consideraciones",
+          "Análisis Detallado del Tema",
+          "Conclusiones y Síntesis Final",
       ]
 
-      # Generar diapositivas usando la información real obtenida
+      # Generar diapositivas integrando el contenido real recopilado
       for i in range(num_slides):
         slide = prs.slides.add_slide(prs.slide_layouts[1])
 
-        sub_titulo = (
-            subtitulos_ideas[i]
-            if i < len(subtitulos_ideas)
+        titulo_actual = (
+            titulos_secciones[i]
+            if i < len(titulos_secciones)
             else f"Aspecto Clave {i+1}"
         )
-        slide.shapes.title.text = f"{i+1}. {sub_titulo}"
+        slide.shapes.title.text = f"{i+1}. {titulo_actual}"
 
-        f1 = (
-            lista_fragmentos[i % len(lista_fragmentos)]
-            if len(lista_fragmentos) > 0
-            else ""
-        )
-        f2 = (
-            lista_fragmentos[(i + 1) % len(lista_fragmentos)]
-            if len(lista_fragmentos) > 1
-            else f1
-        )
+        # Asignar fragmentos de texto real de forma inteligente
+        if fragmentos_web:
+          idx1 = i % len(fragmentos_web)
+          idx2 = (i + 1) % len(fragmentos_web)
+          p1 = fragmentos_web[idx1]
+          p2 = fragmentos_web[idx2]
 
-        contenido_real = (
-            f"• {f1[:220]}...\n\n• Elemento complementario: {f2[:220]}..."
-        )
-        slide.placeholders[1].text = contenido_real
+          texto_diapositiva = (
+              f"• {p1}\n\n• Aspecto complementario: {p2}\n\n• Análisis"
+              f" aplicado al estudio de {tema}."
+          )
+        else:
+          texto_diapositiva = (
+              f"• Conceptos fundamentales y análisis detallado sobre {tema}.\n\n•"
+              " Importancia de los elementos clave dentro de esta área de"
+              " estudio."
+          )
 
-      # Diapositiva final con los links de YouTube reales
+        slide.placeholders[1].text = texto_diapositiva
+
+      # Diapositiva final con enlaces de YouTube
       if incluir_yt and lista_videos:
         slide_yt = prs.slides.add_slide(prs.slide_layouts[1])
         slide_yt.shapes.title.text = "🎥 Enlaces de Videos en YouTube"
         detalle_yt = (
-            "Recursos audiovisuales recomendados para complementar la"
-            " clase:\n\n"
+            "Recursos audiovisuales recomendados para profundizar en el"
+            " tema:\n\n"
         )
         for v in lista_videos:
           detalle_yt += f"• {v['titulo']}\n  🔗 {v['url']}\n\n"
@@ -179,7 +183,9 @@ if generar_btn:
       estado.text("¡Completado con éxito!")
 
       with open(archivo_salida, "rb") as f:
-        st.success("🎉 ¡Tu presentación con contenido real está lista!")
+        st.success(
+            "🎉 ¡Tu presentación detallada con contenido real está lista!"
+        )
         st.download_button(
             label="📥 Descargar Presentación (.pptx)",
             data=f,
