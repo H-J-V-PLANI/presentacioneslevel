@@ -1,11 +1,14 @@
+import io
 import os
+import requests
 import streamlit as st
+from duckduckgo_search import DDGS
 from pptx import Presentation
 from pptx.util import Inches, Pt
 
 # Configuración de la interfaz web
 st.set_page_config(
-    page_title="Generador de Presentaciones Educativas",
+    page_title="Generador Universal de Presentaciones Educativas",
     page_icon="🎓",
     layout="centered",
 )
@@ -42,16 +45,17 @@ if st.sidebar.button("Cerrar Sesión"):
   st.session_state.autenticado = False
   st.rerun()
 
-st.title("🎓 Generador de Presentaciones Académicas")
+st.title("🎓 Generador Universal de Presentaciones con IA y Multimedia")
 st.write(
-    "Crea presentaciones educativas estructuradas, detalladas y con enlaces de"
-    " YouTube listos para exponer."
+    "Escribe **cualquier tema o asignatura** y la app investigará el contenido"
+    " real, buscará imágenes ilustrativas y enlaces de YouTube para tus"
+    " diapositivas."
 )
 
 with st.form("form_presentacion"):
   tema = st.text_input(
-      "¿Sobre qué tema o asignatura deseas la presentación?",
-      "La animación 2D",
+      "¿Sobre qué tema, asignatura o concepto deseas la presentación?",
+      "La Revolución Industrial",
   )
   col1, col2 = st.columns(2)
   with col1:
@@ -59,156 +63,70 @@ with st.form("form_presentacion"):
         "Número de diapositivas", min_value=3, max_value=8, value=4
     )
   with col2:
-    incluir_yt = st.checkbox(
-        "Incluir enlaces de videos de YouTube", value=True
-    )
+    incluir_yt = st.checkbox("Incluir enlaces de videos de YouTube", value=True)
 
   generar_btn = st.form_submit_button("🚀 Generar y Descargar Presentación")
 
 
-# Función inteligente para generar contenido académico profundo y adaptado al tema
-def generar_contenido_academico(query, total_slides):
-  q = query.lower()
+# Función universal para buscar contenido de texto, videos e imágenes reales
+@st.cache_data(show_spinner=False)
+def investigar_tema_universal(query, total_slides):
+  textos_extraidos = []
+  videos_encontrados = []
+  imagenes_encontradas = []
 
-  # Base de conocimiento especializada según el tema o asignaturas comunes
-  if "animación" in q or "2d" in q:
-    banco_contenido = [
+  try:
+    with DDGS() as ddgs:
+      # 1. Búsqueda de texto y fragmentos reales de cualquier tema
+      resultados_web = ddgs.text(query, max_results=12)
+      if resultados_web:
+        for r in resultados_web:
+          cuerpo = r.get("body", "")
+          if len(cuerpo) > 40:
+            textos_extraidos.append(cuerpo)
+
+      # 2. Búsqueda de videos en YouTube
+      resultados_yt = ddgs.text(
+          f"site:youtube.com watch?v {query}", max_results=3
+      )
+      if resultados_yt:
+        for r in resultados_yt:
+          titulo_v = r.get("title", "Video educativo recomendado")
+          url_v = r.get("href", "#")
+          videos_encontrados.append({"titulo": titulo_v, "url": url_v})
+
+      # 3. Búsqueda de imágenes ilustrativas reales
+      resultados_img = ddgs.images(query, max_results=total_slides)
+      if resultados_img:
+        for img in resultados_img:
+          img_url = img.get("image")
+          if img_url:
+            imagenes_encontradas.append(img_url)
+  except Exception:
+    pass
+
+  # Si la web no devuelve suficiente texto, generamos contenido dinámico inteligente
+  if not textos_extraidos:
+    textos_extraidos = [
         (
-            "Fundamentos de la Animación 2D",
-            (
-                "• La animación 2D se basa en la creación de movimiento en un"
-                " espacio bidimensional utilizando altura y anchura.\n\n•"
-                " Incluye técnicas tradicionales fotograma a fotograma y"
-                " animación digital vectorial o de mapa de bits.\n\n• Es la"
-                " base visual para la narrativa en cine, televisión, diseño"
-                " web y multimedia."
-            ),
+            f"Conceptos principales, antecedentes y definición fundamental sobre"
+            f" {query}."
         ),
         (
-            "Los 12 Principios de la Animación",
-            (
-                "• Estiramiento y encogimiento (Squash and stretch): Aporta"
-                " sensación de peso y flexibilidad a los objetos.\n\n• Anticipación"
-                " y puesta en escena: Preparan al espectador para la acción"
-                " principal y dirigen la atención visual.\n\n• Animación directa"
-                " y pose a pose: Métodos esenciales de planificación y ejecución"
-                " temporal."
-            ),
+            f"Características estructurales, metodologías y elementos clave en"
+            f" el estudio de {query}."
         ),
         (
-            "Herramientas y Software Profesional",
-            (
-                "• Utilización de software especializado para la vectorización,"
-                " rigging y control de líneas de tiempo.\n\n• Creación de"
-                " assets gráficos optimizados para interfaces digitales y"
-                " plataformas web.\n\n• Integración de capas, símbolos y"
-                " fotogramas clave (keyframes) en el flujo de trabajo."
-            ),
+            f"Aplicaciones prácticas, impacto y desarrollo en el entorno"
+            f" profesional o académico de {query}."
         ),
         (
-            "Aplicaciones Prácticas y Multimedia",
-            (
-                "• Desarrollo de contenidos interactivos, anuncios"
-                " publicitarios y cortometrajes educativos.\n\n• Sincronización"
-                " de audio, efectos sonoros y locución con la línea de"
-                " tiempo.\n\n• Exportación en formatos optimizados (MP4, GIF, Lottie"
-                " JSON) para web y dispositivos móviles."
-            ),
-        ),
-    ]
-  else:
-    # Contenido genérico estructurado y profesional para cualquier otra materia
-    banco_contenido = [
-        (
-            f"Introducción y Conceptos Clave de {query}",
-            (
-                f"• Análisis profundo de los principios teóricos y normativos"
-                f" que rigen {query}.\n\n• Importancia del contexto, los"
-                f" antecedentes y los objetivos principales de estudio en esta"
-                f" área.\n\n• Delimitación del campo de aplicación y su"
-                f" relevancia académica o técnica."
-            ),
-        ),
-        (
-            "Características y Elementos Estructurales",
-            (
-                f"• Componentes esenciales que conforman el desarrollo de"
-                f" {query}.\n\n• Relación directa entre la teoría metodológica"
-                f" y su ejecución práctica.\n\n• Criterios de calidad,"
-                f" optimización de recursos y estándares profesionales"
-                f" aplicados."
-            ),
-        ),
-        (
-            "Proceso, Fases y Metodología de Trabajo",
-            (
-                f"• Planificación estratégica por etapas para el diseño y"
-                f" ejecución de proyectos sobre {query}.\n\n• Herramientas,"
-                f" recursos tecnológicos y normativas de buenas prácticas.\n\n•"
-                f" Resolución de problemas comunes y control de calidad en el"
-                f" proceso."
-            ),
-        ),
-        (
-            "Aplicaciones Prácticas y Casos de Estudio",
-            (
-                f"• Implementación de soluciones reales utilizando {query} en"
-                f" entornos profesionales.\n\n• Análisis de impacto, ventajas"
-                f" competitivas y beneficios directos para los usuarios o"
-                f" estudiantes.\n\n• Evaluación de resultados y métricas de"
-                f" éxito."
-            ),
-        ),
-        (
-            "Retos Actuales e Innovación en el Área",
-            (
-                f"• Nuevas tendencias tecnológicas y adaptaciones futuras"
-                f" relacionadas con {query}.\n\n• Desafíos comunes a nivel de"
-                f" diseño, ejecución y sostenibilidad.\n\n• Oportunidades de"
-                f" mejora continua y actualización profesional."
-            ),
-        ),
-        (
-            "Conclusiones y Resumen General",
-            (
-                f"• Síntesis de los aprendizajes y puntos críticos analizados"
-                f" sobre {query}.\n\n• Reflexión final sobre la importancia de"
-                f" dominar estas competencias en el ámbito formativo.\n\n•"
-                f" Espacio para preguntas, debate y retroalimentación grupal."
-            ),
+            f"Retos, perspectivas futuras y consideraciones esenciales"
+            f" relacionadas con {query}."
         ),
     ]
 
-  # Ajustar a la cantidad de diapositivas solicitadas
-  slides_generadas = []
-  for i in range(total_slides):
-    if i < len(banco_contenido):
-      slides_generadas.append(banco_contenido[i])
-    else:
-      slides_generadas.append((
-          f"Aspecto Adicional {i+1} sobre {query}",
-          (
-              f"• Profundización en los detalles técnicos y operativos de"
-              f" {query}.\n\n• Consideraciones adicionales para el dominio"
-              f" completo de la temática.\n\n• Estrategias de seguimiento y"
-              f" evaluación continua."
-          ),
-      ))
-
-  # Enlaces automáticos de YouTube orientados al tema
-  busqueda_url = query.replace(" ", "+")
-  videos = [
-      {
-          "titulo": f"Tutorial completo y explicación detallada sobre {query}",
-          "url": f"https://www.youtube.com/results?search_query={busqueda_url}",
-      },
-      {
-          "titulo": f"Guía práctica, ejemplos y casos de estudio: {query}",
-          "url": f"https://www.youtube.com/results?search_query={busqueda_url}+curso+practico",
-      },
-  ]
-
-  return slides_generadas, videos
+  return textos_extraidos, videos_encontrados, imagenes_encontradas
 
 
 if generar_btn:
@@ -219,45 +137,93 @@ if generar_btn:
     estado = st.empty()
 
     try:
-      estado.text("📝 Estructurando y redactando contenido académico...")
-      barra.progress(40)
-      contenido_slides, lista_videos = generar_contenido_academico(
+      estado.text(
+          f"🌐 Investigando información, imágenes y videos sobre '{tema}'..."
+      )
+      barra.progress(30)
+      textos_web, lista_videos, lista_imagenes = investigar_tema_universal(
           tema, num_slides
       )
 
-      estado.text("📊 Compilando archivo PowerPoint profesional...")
-      barra.progress(80)
+      estado.text(
+          "📝 Organizando contenido y descargando recursos visuales..."
+      )
+      barra.progress(60)
 
       prs = Presentation()
 
-      # Generar diapositivas con texto desarrollado
-      for titulo_slide, texto_slide in contenido_slides:
-        slide = prs.slides.add_slide(prs.slide_layouts[1])
-        slide.shapes.title.text = titulo_slide
-        slide.placeholders[1].text = texto_slide
+      # Títulos dinámicos y profesionales para cada sección
+      titulos_slides = [
+          "Introducción y Conceptos Principales",
+          "Características y Fundamentos Esenciales",
+          "Proceso, Fases y Metodología",
+          "Aplicaciones Prácticas y Ejemplos",
+          "Importancia en el Área de Estudio",
+          "Ventajas, Retos y Consideraciones",
+          "Análisis Detallado y Enfoque",
+          "Conclusiones y Resumen General",
+      ]
 
-      # Diapositiva final con enlaces directos a YouTube
+      # Generar diapositivas de contenido con texto e imagen
+      for i in range(num_slides):
+        slide = prs.slides.add_slide(prs.slide_layouts[1])
+
+        titulo_seccion = (
+            titulos_slides[i]
+            if i < len(titulos_slides)
+            else f"Punto Clave {i+1}"
+        )
+        slide.shapes.title.text = f"{i+1}. {titulo_seccion}"
+
+        # Asignar texto real de forma rotativa
+        idx_1 = i % len(textos_web)
+        idx_2 = (i + 1) % len(textos_web)
+        p1 = textos_web[idx_1]
+        p2 = textos_web[idx_2]
+
+        contenido_diapositiva = f"• {p1}\n\n• Aspecto complementario: {p2}"
+        slide.placeholders[1].text = contenido_diapositiva
+
+        # Intentar insertar imagen real si está disponible
+        if lista_imagenes:
+          try:
+            img_url = lista_imagenes[i % len(lista_imagenes)]
+            resp = requests.get(img_url, timeout=3)
+            if resp.status_code == 200:
+              image_stream = io.BytesIO(resp.content)
+              # Posicionar la imagen a la derecha de la diapositiva
+              left = Inches(5.5)
+              top = Inches(2.0)
+              width = Inches(4.0)
+              slide.shapes.add_picture(image_stream, left, top, width=width)
+          except Exception:
+            pass  # Si una imagen falla al descargar, continúa sin bloquear la app
+
+      # Diapositiva final con enlaces de YouTube
       if incluir_yt and lista_videos:
         slide_yt = prs.slides.add_slide(prs.slide_layouts[1])
-        slide_yt.shapes.title.text = "🎥 Recursos y Videos en YouTube"
+        slide_yt.shapes.title.text = "🎥 Enlaces de Videos en YouTube"
         detalle_yt = (
-            "Enlaces directos recomendados para profundizar en el"
-            " contenido:\n\n"
+            "Recursos audiovisuales recomendados para complementar la"
+            " clase:\n\n"
         )
         for v in lista_videos:
           detalle_yt += f"• {v['titulo']}\n  🔗 {v['url']}\n\n"
         slide_yt.placeholders[1].text = detalle_yt
 
-      barra.progress(100)
-      estado.text("¡Completado con éxito!")
+      barra.progress(90)
+      estado.text("📊 Compilando archivo PowerPoint...")
 
       archivo_salida = f"presentacion_{os.getpid()}.pptx"
       prs.save(archivo_salida)
 
+      barra.progress(100)
+      estado.text("¡Completado con éxito!")
+
       with open(archivo_salida, "rb") as f:
         st.success(
-            "🎉 ¡Tu presentación detallada está lista para descargar con"
-            " contenido real!"
+            "🎉 ¡Tu presentación universal con imágenes y videos está lista para"
+            " descargar!"
         )
         st.download_button(
             label="📥 Descargar Presentación (.pptx)",
