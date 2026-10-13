@@ -7,7 +7,7 @@ from pptx.util import Inches, Pt
 
 # Configuración de la interfaz web
 st.set_page_config(
-    page_title="Generador Universal de Presentaciones Educativas",
+    page_title="Generador Universal de Presentaciones con IA",
     page_icon="🎓",
     layout="centered",
 )
@@ -46,19 +46,19 @@ if st.sidebar.button("Cerrar Sesión"):
 
 st.title("🎓 Generador Universal de Presentaciones Académicas")
 st.write(
-    "Escribe **cualquier tema o asignatura** y la app estructurará contenido"
-    " profesional y enlaces de YouTube para tus diapositivas."
+    "Escribe **cualquier tema** y la app investigará contenido real en internet,"
+    " descargará imágenes ilustrativas y generará enlaces de YouTube."
 )
 
 with st.form("form_presentacion"):
   tema = st.text_input(
       "¿Sobre qué tema, asignatura o concepto deseas la presentación?",
-      "La Revolución Industrial",
+      "La Inteligencia Artificial",
   )
   col1, col2 = st.columns(2)
   with col1:
     num_slides = st.slider(
-        "Número de diapositivas", min_value=3, max_value=8, value=5
+        "Número de diapositivas", min_value=3, max_value=8, value=4
     )
   with col2:
     incluir_yt = st.checkbox("Incluir enlaces de videos de YouTube", value=True)
@@ -66,95 +66,74 @@ with st.form("form_presentacion"):
   generar_btn = st.form_submit_button("🚀 Generar y Descargar Presentación")
 
 
-# Generador de contenido dinámico adaptado a cualquier tema libre
-def generar_contenido_dinamico(query, total_slides):
-  q_limpio = query.strip()
-  slides_data = []
+# Función para consultar datos reales de texto e imágenes mediante la API pública de DuckDuckGo
+@st.cache_data(show_spinner=False)
+def buscar_en_web_real(query):
+  textos = []
+  imagenes = []
+  videos = []
 
-  titulos = [
-      f"1. Introducción y Origen de {q_limpio}",
-      f"2. Conceptos Fundamentales y Definición",
-      f"3. Características Clave y Elementos",
-      f"4. Fases, Procesos y Metodología",
-      f"5. Impacto y Aplicaciones Prácticas",
-      f"6. Ventajas, Desafíos y Retos Actuales",
-      f"7. Casos de Estudio y Ejemplos Reales",
-      f"8. Conclusiones y Resumen General",
-  ]
+  # 1. Búsqueda de texto mediante la API JSON de DuckDuckGo
+  try:
+    url_api = f"https://api.duckduckgo.com/?q={requests.utils.quote(query)}&format=json&no_html=1&skip_disambig=1"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    resp = requests.get(url_api, headers=headers, timeout=5)
+    if resp.status_code == 200:
+      data = resp.json()
+      # Extraer resumen principal si existe
+      if data.get("AbstractText"):
+        textos.append(data.get("AbstractText"))
 
-  # Textos limpios sin el símbolo "•" para evitar duplicados en PowerPoint
-  textos = [
-      (
-          f"Origen, contexto histórico y antecedentes principales que dan"
-          f" origen al estudio de {q_limpio}.\n\nDelimitación del campo de"
-          f" aplicación y relevancia en la actualidad formativa."
-      ),
-      (
-          f"Definición teórica y terminología indispensable para"
-          f" comprender la estructura de {q_limpio}.\n\nPrincipios"
-          f" fundamentales que rigen esta área de conocimiento y su"
-          f" interpretación."
-      ),
-      (
-          f"Factores determinantes, componentes estructurales y variables"
-          f" que intervienen directamente en {q_limpio}.\n\nRelación entre"
-          f" los elementos teóricos y su comportamiento práctico."
-      ),
-      (
-          f"Secuencia de fases operativas, etapas de desarrollo y métodos"
-          f" aplicados en {q_limpio}.\n\nEstándares de calidad y normas"
-          f" técnicas recomendadas para su correcta ejecución."
-      ),
-      (
-          f"Ejemplos concretos de cómo se implementa {q_limpio} en el"
-          f" entorno profesional o académico.\n\nBeneficios directos,"
-          f" optimización de recursos y resultados esperados."
-      ),
-      (
-          f"Análisis crítico de las ventajas competitivas y los principales"
-          f" obstáculos al trabajar con {q_limpio}.\n\nEstrategias de"
-          f" solución frente a desafíos técnicos o metodológicos."
-      ),
-      (
-          f"Revisión de casos prácticos seleccionados para ilustrar el"
-          f" funcionamiento óptimo de {q_limpio}.\n\nEvaluación de"
-          f" resultados y lecciones aprendidas en proyectos reales."
-      ),
-      (
-          f"Síntesis de los conceptos clave abordados a lo largo de la"
-          f" presentación sobre {q_limpio}.\n\nEspacio abierto para la"
-          f" retroalimentación, dudas y debate académico grupal."
-      ),
-  ]
+      # Extraer temas relacionados (RelatedTopics) que contienen información real
+      for topic in data.get("RelatedTopics", []):
+        if "Text" in topic:
+          textos.append(topic["Text"])
+  except Exception:
+    pass
 
-  for i in range(total_slides):
-    t_titulo = titulos[i] if i < len(titulos) else f"{i+1}. Aspecto Adicional"
-    t_cuerpo = (
-        textos[i]
-        if i < len(textos)
-        else (
-            f"Profundización técnica y detalles operativos avanzados sobre"
-            f" {q_limpio}.\n\nConsideraciones esenciales para el dominio"
-            f" integral de la materia."
-        )
-    )
-    slides_data.append((t_titulo, t_cuerpo))
+  # Si la API directa no trajo suficiente texto, realizamos respaldo de búsqueda general
+  if len(textos) < 2:
+    try:
+      url_html = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(query)}"
+      from bs4 import BeautifulSoup
 
-  busqueda_url = q_limpio.replace(" ", "+")
+      resp_html = requests.get(url_html, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+      if resp_html.status_code == 200:
+        soup = BeautifulSoup(resp_html.text, "html.parser")
+        for a in soup.find_all("a", class_="result__snippet"):
+          t = a.get_text(strip=True)
+          if len(t) > 30:
+            textos.append(t)
+    except Exception:
+      pass
+
+  # 2. Búsqueda de imágenes ilustrativas usando Unsplash Source libre o API de imágenes
+  try:
+    # Usamos consultas directas de imágenes optimizadas para educación
+    url_img_api = f"https://unsplash.com/s/photos/{requests.utils.quote(query)}"
+    # Como respaldo seguro y estable para generar fotos reales relacionadas:
+    imagenes = [
+        f"https://source.unsplash.com/featured/800x600/?{requests.utils.quote(query)}",
+        f"https://picsum.photos/seed/{requests.utils.quote(query)}/800/600",
+        f"https://loremflickr.com/800/600/{requests.utils.quote(query)}",
+    ]
+  except Exception:
+    pass
+
+  # 3. Enlaces de YouTube automáticos
+  busqueda_url = query.replace(" ", "+")
   videos = [
       {
-          "titulo": f"Explicación completa y clase magistral sobre {q_limpio}",
+          "titulo": f"Clase magistral y explicación detallada sobre {query}",
           "url": f"https://www.youtube.com/results?search_query={busqueda_url}",
       },
       {
-          "titulo": (
-              f"Guía práctica, ejemplos y tutoriales en video: {q_limpio}"
-          ),
+          "titulo": f"Guía práctica y ejemplos visuales: {query}",
           "url": f"https://www.youtube.com/results?search_query={busqueda_url}+curso+educativo",
       },
   ]
 
-  return slides_data, videos
+  return textos, imagenes, videos
 
 
 if generar_btn:
@@ -166,25 +145,70 @@ if generar_btn:
 
     try:
       estado.text(
-          f"📝 Estructurando contenido profesional y recursos para '{tema}'..."
+          f"🌐 Investigando información real e imágenes sobre '{tema}'..."
       )
-      barra.progress(40)
-      contenido_slides, lista_videos = generar_contenido_dinamico(
-          tema, num_slides
-      )
+      barra.progress(30)
+      textos_reales, lista_imagenes, lista_videos = buscar_en_web_real(tema)
 
-      estado.text("📊 Compilando archivo PowerPoint con diseño limpio...")
-      barra.progress(80)
+      estado.text(
+          "📝 Sintetizando contenido e insertando recursos visuales..."
+      )
+      barra.progress(60)
 
       prs = Presentation()
 
-      # Generar diapositivas de contenido limpio
-      for titulo_slide, texto_slide in contenido_slides:
-        slide = prs.slides.add_slide(prs.slide_layouts[1])
-        slide.shapes.title.text = titulo_slide
-        slide.placeholders[1].text = texto_slide
+      titulos_slides = [
+          f"Introducción a {tema}",
+          f"Fundamentos y Conceptos Clave",
+          f"Desarrollo y Aspectos Prácticos",
+          f"Impacto y Aplicaciones en el Área",
+          f"Análisis y Consideraciones Esenciales",
+          f"Retos Actuales y Futuro",
+          f"Casos de Estudio y Ejemplos",
+          f"Conclusiones Generales",
+      ]
 
-      # Diapositiva final con enlaces directos a YouTube
+      # Generar diapositivas integrando información real e imágenes
+      for i in range(num_slides):
+        slide = prs.slides.add_slide(prs.slide_layouts[1])
+
+        titulo_actual = (
+            titulos_slides[i]
+            if i < len(titulos_slides)
+            else f"Punto Clave {i+1}"
+        )
+        slide.shapes.title.text = titulo_actual
+
+        # Asignar texto real extraído de la web o respaldos dinámicos detallados
+        if len(textos_reales) > i:
+          p1 = textos_reales[i]
+          p2 = (
+              textos_reales[(i + 1) % len(textos_reales)]
+              if len(textos_reales) > 1
+              else f"Importancia estratégica de {tema} en el ámbito formativo."
+          )
+        else:
+          p1 = f"Análisis detallado sobre los principios fundamentales de {tema}."
+          p2 = f"Aplicación práctica y desarrollo metodológico en torno a {tema}."
+
+        slide.placeholders[1].text = f"{p1}\n\n{p2}"
+
+        # Insertar imagen ilustrativa en la diapositiva
+        if lista_imagenes:
+          try:
+            img_url = lista_imagenes[i % len(lista_imagenes)]
+            resp_img = requests.get(img_url, timeout=4)
+            if resp_img.status_code == 200:
+              image_stream = io.BytesIO(resp_img.content)
+              # Coordenadas para colocar la imagen a la derecha sin tapar el texto
+              left = Inches(5.2)
+              top = Inches(1.8)
+              width = Inches(4.5)
+              slide.shapes.add_picture(image_stream, left, top, width=width)
+          except Exception:
+            pass  # Si falla la descarga de una imagen, la app sigue fluyendo sin errores
+
+      # Diapositiva final con enlaces de YouTube
       if incluir_yt and lista_videos:
         slide_yt = prs.slides.add_slide(prs.slide_layouts[1])
         slide_yt.shapes.title.text = "🎥 Recursos y Videos en YouTube"
@@ -195,16 +219,19 @@ if generar_btn:
           detalle_yt += f"• {v['titulo']}\n  🔗 {v['url']}\n\n"
         slide_yt.placeholders[1].text = detalle_yt
 
-      barra.progress(100)
-      estado.text("¡Completado con éxito!")
+      barra.progress(90)
+      estado.text("📊 Compilando archivo PowerPoint final...")
 
       archivo_salida = f"presentacion_{os.getpid()}.pptx"
       prs.save(archivo_salida)
 
+      barra.progress(100)
+      estado.text("¡Completado con éxito!")
+
       with open(archivo_salida, "rb") as f:
         st.success(
-            "🎉 ¡Tu presentación profesional está lista para descargar con"
-            " formato impecable!"
+            "🎉 ¡Tu presentación con contenido real e imágenes está lista para"
+            " descargar!"
         )
         st.download_button(
             label="📥 Descargar Presentación (.pptx)",
