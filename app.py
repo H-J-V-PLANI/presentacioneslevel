@@ -75,14 +75,12 @@ def buscar_contenido_real(query):
   videos_encontrados = []
   try:
     with DDGS() as ddgs:
-      # Búsqueda de texto general obteniendo múltiples fragmentos independientes
       resultados = ddgs.text(query, max_results=8)
       if resultados:
         for r in resultados:
           if "body" in r and len(r["body"]) > 30:
             fragmentos.append(r["body"])
 
-      # Búsqueda de videos en YouTube
       resultados_yt = ddgs.text(f"site:youtube.com {query}", max_results=3)
       if resultados_yt:
         for r in resultados_yt:
@@ -121,7 +119,6 @@ if generar_btn:
 
       prs = Presentation()
 
-      # Subtítulos dinámicos y profesionales para cada sección
       subtitulos_ideas = [
           "Definición y Conceptos Fundamentales",
           "Características y Elementos Principales",
@@ -134,33 +131,31 @@ if generar_btn:
       ]
 
       # Generar diapositivas usando la información real obtenida
-    for i in range(num_slides):
-      slide = prs.slides.add_slide(prs.slide_layouts[1])
+      for i in range(num_slides):
+        slide = prs.slides.add_slide(prs.slide_layouts[1])
 
-      # Título de la diapositiva
-      sub_titulo = (
-          subtitulos_ideas[i]
-          if i < len(subtitulos_ideas)
-          else f"Aspecto Clave {i+1}"
-      )
-      slide.shapes.title.text = f"{i+1}. {sub_titulo}"
+        sub_titulo = (
+            subtitulos_ideas[i]
+            if i < len(subtitulos_ideas)
+            else f"Aspecto Clave {i+1}"
+        )
+        slide.shapes.title.text = f"{i+1}. {sub_titulo}"
 
-      # Seleccionar fragmentos reales de la web para esta diapositiva
-      f1 = (
-          lista_fragmentos[i % len(lista_fragmentos)]
-          if len(lista_fragmentos) > 0
-          else ""
-      )
-      f2 = (
-          lista_fragmentos[(i + 1) % len(lista_fragmentos)]
-          if len(lista_fragmentos) > 1
-          else f1
-      )
+        f1 = (
+            lista_fragmentos[i % len(lista_fragmentos)]
+            if len(lista_fragmentos) > 0
+            else ""
+        )
+        f2 = (
+            lista_fragmentos[(i + 1) % len(lista_fragmentos)]
+            if len(lista_fragmentos) > 1
+            else f1
+        )
 
-      contenido_real = (
-          f"• {f1[:220]}...\n\n• Elemento complementario: {f2[:220]}..."
-      )
-      slide.placeholders[1].text = contenido_real
+        contenido_real = (
+            f"• {f1[:220]}...\n\n• Elemento complementario: {f2[:220]}..."
+        )
+        slide.placeholders[1].text = contenido_real
 
       # Diapositiva final con los links de YouTube reales
       if incluir_yt and lista_videos:
