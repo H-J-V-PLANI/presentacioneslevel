@@ -9,7 +9,7 @@ from pptx.enum.text import MSO_ANCHOR
 from pptx.util import Inches, Pt
 
 st.set_page_config(
-    page_title="Generador Profesional de Presentaciones",
+    page_title="PLANI PRESENTACION LEVEL",
     page_icon="🎓",
     layout="centered",
 )
@@ -19,33 +19,286 @@ HEADERS = {
 }
 TIMEOUT = 8
 
-# --- LOGIN (mejor: guarda las claves en .streamlit/secrets.toml) ---
-try:
-    CREDENCIALES = dict(st.secrets["credenciales"])
-except Exception:
-    CREDENCIALES = {"profesor": "profe2026", "estudiante": "clase2026"}
+# =====================================================================
+#  USUARIOS, LOGIN Y PANEL DE ADMINISTRADOR
+# =====================================================================
+import datetime as dt
+import hashlib
+import hmac
+import json
+import secrets as pysecrets
+from pathlib import Path
 
-if "autenticado" not in st.session_state:
-    st.session_state.autenticado = False
+TITULO_APP = "PLANI PRESENTACION LEVEL"
+BASE_DIR = Path(__file__).resolve().parent
+USUARIOS_PATH = BASE_DIR / "usuarios.json"
+LOGO_CANDIDATOS = ["logo.png", "logo.jpg", "logo.jpeg", "logo.webp"]
 
-if not st.session_state.autenticado:
-    st.title("🔐 Acceso a la Plataforma Educativa")
+
+def _hash(password, salt=None):
+    salt = salt or pysecrets.token_hex(16)
+    h = hashlib.pbkdf2_hmac(
+        "sha256", password.encode("utf-8"), bytes.fromhex(salt), 200_000
+    )
+    return salt, h.hex()
+
+
+def _nuevo_registro(nombre, password, rol="usuario", vence=None, clave_inicial=False):
+    salt, h = _hash(password)
+    return {
+        "nombre": nombre, "salt": salt, "hash": h, "rol": rol,
+        "activo": True, "vence": vence,
+        "creado": dt.date.today().isoformat(),
+        "clave_inicial": clave_inicial,
+    }
+
+
+def _clave_correcta(password, reg):
+    _, h = _hash(password, reg["salt"])
+    return hmac.compare_digest(h, reg["hash"])
+
+
+def guardar_usuarios(usuarios):
+    tmp = USUARIOS_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(usuarios, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(USUARIOS_PATH)
+
+
+def cargar_usuarios():
+    if USUARIOS_PATH.exists():
+        try:
+            return json.loads(USUARIOS_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            st.error("No se pudo leer usuarios.json. Revisa el archivo antes de continuar.")
+            st.stop()
+    # Primera ejecución: crear el administrador inicial
+    try:
+        admin_user = str(st.secrets["admin"]["usuario"]).strip().lower()
+        admin_pass = str(st.secrets["admin"]["clave"])
+        inicial = False
+    except Exception:
+        admin_user, admin_pass, inicial = "admin", "admin2026", True
+    usuarios = {
+        admin_user: _nuevo_registro("Administrador", admin_pass, "admin", None, inicial)
+    }
+    guardar_usuarios(usuarios)
+    return usuarios
+
+
+def autenticar(usuario, password):
+    reg = cargar_usuarios().get(usuario.strip().lower())
+    if not reg or not _clave_correcta(password, reg):
+        return None, "Usuario o contraseña incorrectos."
+    if not reg.get("activo", True):
+        return None, "Tu cuenta está desactivada. Contacta al administrador."
+    vence = reg.get("vence")
+    if vence and dt.date.fromisoformat(vence) < dt.date.today():
+        return None, "Tu acceso venció. Contacta al administrador para renovarlo."
+    return reg, None
+
+
+ESTILO_LOGIN = """
+<style>
+.stApp, [data-testid="stAppViewContainer"] {
+    background: linear-gradient(135deg, #0A2A5E 0%, #0F3F8C 55%, #14509F 100%);
+}
+[data-testid="stHeader"] { background: transparent; }
+[data-testid="stSidebar"] { display: none; }
+.plani-title {
+    color: #FFFFFF; text-align: center; font-size: 2.1rem; font-weight: 800;
+    letter-spacing: .08em; margin: 1.5rem 0 1.8rem;
+}
+[data-testid="stForm"] {
+    background: #FFFFFF; border: none; border-radius: 18px;
+    padding: 2rem 2rem 1.6rem; box-shadow: 0 20px 50px rgba(0,0,0,.35);
+}
+[data-testid="stForm"] label p, [data-testid="stForm"] .plani-sub { color: #0A2A5E !important; }
+.plani-sub { text-align: center; font-size: 1rem; margin: .4rem 0 1rem; }
+[data-testid="stForm"] button {
+    background: #0F3F8C; color: #FFFFFF; border: none; font-weight: 700;
+}
+[data-testid="stForm"] button:hover { background: #0A2A5E; color: #FFFFFF; }
+.plani-logo-ph {
+    width: 110px; height: 110px; margin: 0 auto; border-radius: 50%;
+    background: #0F3F8C; color: #FFFFFF; font-weight: 800; font-size: 1.4rem;
+    display: flex; align-items: center; justify-content: center;
+}
+</style>
+"""
+
+
+def _logo():
+    for nombre in LOGO_CANDIDATOS:
+        ruta = BASE_DIR / nombre
+        if ruta.exists():
+            c = st.columns([1, 2, 1])
+            c[1].image(str(ruta), use_container_width=True)
+            return
+    st.markdown('<div class="plani-logo-ph">PLANI</div>', unsafe_allow_html=True)
+
+
+def pantalla_login():
+    st.markdown(ESTILO_LOGIN, unsafe_allow_html=True)
+    st.markdown(f'<div class="plani-title">{TITULO_APP}</div>', unsafe_allow_html=True)
     with st.form("login_form"):
+        _logo()
+        st.markdown('<div class="plani-sub">Inicia sesión para continuar</div>',
+                    unsafe_allow_html=True)
         user = st.text_input("Usuario")
         password = st.text_input("Contraseña", type="password")
-        if st.form_submit_button("Ingresar"):
-            if user in CREDENCIALES and CREDENCIALES[user] == password:
-                st.session_state.autenticado = True
-                st.session_state.usuario = user
-                st.rerun()
-            else:
-                st.error("Usuario o contraseña incorrectos.")
-    st.stop()
+        entrar = st.form_submit_button("Ingresar", use_container_width=True)
+    if entrar:
+        reg, error = autenticar(user, password)
+        if error:
+            st.error(error)
+        else:
+            st.session_state.update(
+                autenticado=True,
+                usuario=user.strip().lower(),
+                rol=reg["rol"],
+                nombre=reg.get("nombre") or user.strip(),
+            )
+            st.rerun()
 
-st.sidebar.success(f"Conectado como: **{st.session_state.usuario}**")
-if st.sidebar.button("Cerrar Sesión"):
-    st.session_state.autenticado = False
-    st.rerun()
+
+def _es_ultimo_admin(usuarios, usuario):
+    admins = [u for u, r in usuarios.items() if r["rol"] == "admin" and r.get("activo", True)]
+    return usuarios[usuario]["rol"] == "admin" and admins == [usuario]
+
+
+def cambiar_mi_clave():
+    with st.sidebar.expander("🔑 Cambiar mi contraseña"):
+        with st.form("form_mi_clave", clear_on_submit=True):
+            actual = st.text_input("Contraseña actual", type="password")
+            nueva = st.text_input("Nueva contraseña (mín. 6)", type="password")
+            ok = st.form_submit_button("Actualizar")
+        if ok:
+            usuarios = cargar_usuarios()
+            yo = usuarios.get(st.session_state.usuario)
+            if not yo or not _clave_correcta(actual, yo):
+                st.error("La contraseña actual no es correcta.")
+            elif len(nueva) < 6:
+                st.error("La nueva contraseña debe tener al menos 6 caracteres.")
+            else:
+                yo["salt"], yo["hash"] = _hash(nueva)
+                yo["clave_inicial"] = False
+                guardar_usuarios(usuarios)
+                st.success("Contraseña actualizada.")
+
+
+def panel_admin():
+    usuarios = cargar_usuarios()
+    yo = st.session_state.usuario
+    if "flash" in st.session_state:
+        st.success(st.session_state.pop("flash"))
+    if usuarios.get(yo, {}).get("clave_inicial"):
+        st.warning(
+            "Estás usando la contraseña inicial del administrador. "
+            "Cámbiala en el menú lateral (🔑 Cambiar mi contraseña)."
+        )
+
+    # ---- Crear usuario ----
+    st.subheader("➕ Crear usuario")
+    with st.form("crear_usuario", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        nombre = c1.text_input("Nombre completo")
+        nuevo = c2.text_input("Usuario (letras, números, . _ -)")
+        c3, c4 = st.columns(2)
+        clave = c3.text_input("Contraseña (mín. 6 caracteres)", type="password")
+        rol = c4.selectbox("Rol", ["usuario", "admin"])
+        sin_venc = st.checkbox("Sin fecha de vencimiento")
+        vence = st.date_input(
+            "Acceso válido hasta", value=dt.date.today() + dt.timedelta(days=30)
+        )
+        crear = st.form_submit_button("Crear usuario")
+    if crear:
+        nuevo = nuevo.strip().lower()
+        if not re.fullmatch(r"[a-z0-9_.-]{3,30}", nuevo):
+            st.error("Usuario inválido: usa de 3 a 30 letras minúsculas, números, punto, guion o guion bajo.")
+        elif nuevo in usuarios:
+            st.error("Ese usuario ya existe.")
+        elif len(clave) < 6:
+            st.error("La contraseña debe tener al menos 6 caracteres.")
+        else:
+            usuarios[nuevo] = _nuevo_registro(
+                nombre.strip() or nuevo, clave, rol,
+                None if sin_venc else vence.isoformat(),
+            )
+            guardar_usuarios(usuarios)
+            st.session_state.flash = f"Usuario «{nuevo}» creado."
+            st.rerun()
+
+    # ---- Lista ----
+    st.subheader("👥 Usuarios")
+    st.dataframe(
+        [
+            {
+                "Usuario": u,
+                "Nombre": r.get("nombre", ""),
+                "Rol": r["rol"],
+                "Estado": "Activo" if r.get("activo", True) else "Desactivado",
+                "Vence": r.get("vence") or "Sin vencimiento",
+                "Creado": r.get("creado", ""),
+            }
+            for u, r in usuarios.items()
+        ],
+        use_container_width=True, hide_index=True,
+    )
+
+    # ---- Gestionar ----
+    st.subheader("⚙️ Gestionar usuario")
+    sel = st.selectbox("Selecciona un usuario", list(usuarios))
+    reg = usuarios[sel]
+    a, b = st.columns(2)
+
+    with a:
+        with st.form(f"form_estado_{sel}"):
+            activo = st.checkbox("Cuenta activa", value=reg.get("activo", True))
+            sin = st.checkbox("Sin vencimiento", value=not reg.get("vence"))
+            fecha = st.date_input(
+                "Válido hasta",
+                value=dt.date.fromisoformat(reg["vence"]) if reg.get("vence")
+                else dt.date.today() + dt.timedelta(days=30),
+            )
+            guardar = st.form_submit_button("Guardar cambios")
+        if guardar:
+            if not activo and sel == yo:
+                st.error("No puedes desactivar tu propia cuenta.")
+            elif not activo and _es_ultimo_admin(usuarios, sel):
+                st.error("Debe quedar al menos un administrador activo.")
+            else:
+                reg["activo"] = activo
+                reg["vence"] = None if sin else fecha.isoformat()
+                guardar_usuarios(usuarios)
+                st.session_state.flash = f"Cambios guardados para «{sel}»."
+                st.rerun()
+
+    with b:
+        with st.form(f"form_clave_{sel}", clear_on_submit=True):
+            nueva = st.text_input("Nueva contraseña (mín. 6)", type="password")
+            restablecer = st.form_submit_button("Restablecer contraseña")
+        if restablecer:
+            if len(nueva) < 6:
+                st.error("La contraseña debe tener al menos 6 caracteres.")
+            else:
+                reg["salt"], reg["hash"] = _hash(nueva)
+                reg["clave_inicial"] = False
+                guardar_usuarios(usuarios)
+                st.session_state.flash = f"Contraseña de «{sel}» restablecida."
+                st.rerun()
+
+    confirmar = st.checkbox(f"Confirmo que quiero eliminar a «{sel}»", key=f"conf_{sel}")
+    if st.button("🗑️ Eliminar usuario", disabled=not confirmar):
+        if sel == yo:
+            st.error("No puedes eliminar tu propia cuenta.")
+        elif _es_ultimo_admin(usuarios, sel):
+            st.error("Debe quedar al menos un administrador activo.")
+        else:
+            del usuarios[sel]
+            guardar_usuarios(usuarios)
+            st.session_state.flash = f"Usuario «{sel}» eliminado."
+            st.rerun()
+
 
 # =====================================================================
 #  BÚSQUEDA DE INFORMACIÓN REAL
@@ -404,25 +657,26 @@ def construir_pptx(tema, slides, fuentes, portada, incluir_yt):
 # =====================================================================
 #  INTERFAZ
 # =====================================================================
-st.title("🎓 Generador de Presentaciones con Información Real")
-st.write(
-    "Escribe un tema y la app reunirá información verificable de varias fuentes, "
-    "con imágenes relacionadas y una diapositiva de referencias."
-)
+def pantalla_generador():
+    st.title("🎓 Generador de Presentaciones con Información Real")
+    st.write(
+        "Escribe un tema y la app reunirá información verificable de varias fuentes, "
+        "con imágenes relacionadas y una diapositiva de referencias."
+    )
 
-with st.form("form_presentacion"):
-    tema = st.text_input("Tema, asignatura o concepto", "La fotosíntesis")
-    c1, c2 = st.columns(2)
-    with c1:
-        num_slides = st.slider("Diapositivas de contenido", 3, 10, 6)
-    with c2:
-        incluir_yt = st.checkbox("Incluir enlaces de YouTube", value=True)
-    generar = st.form_submit_button("🚀 Generar presentación")
+    with st.form("form_presentacion"):
+        tema = st.text_input("Tema, asignatura o concepto", "La fotosíntesis")
+        c1, c2 = st.columns(2)
+        with c1:
+            num_slides = st.slider("Diapositivas de contenido", 3, 10, 6)
+        with c2:
+            incluir_yt = st.checkbox("Incluir enlaces de YouTube", value=True)
+        generar = st.form_submit_button("🚀 Generar presentación")
 
-if generar:
-    if not tema.strip():
-        st.warning("Escribe un tema válido.")
-    else:
+    if generar:
+        if not tema.strip():
+            st.warning("Escribe un tema válido.")
+            return
         try:
             with st.spinner("Reuniendo información e imágenes..."):
                 resultado = recopilar(tema.strip(), num_slides)
@@ -441,3 +695,27 @@ if generar:
                 )
         except Exception as err:
             st.error(f"Ocurrió un error: {err}")
+
+
+# =====================================================================
+#  ENRUTADOR
+# =====================================================================
+if not st.session_state.get("autenticado"):
+    pantalla_login()
+    st.stop()
+
+st.sidebar.success(f"Conectado como: **{st.session_state.get('nombre') or st.session_state.usuario}**")
+if st.sidebar.button("Cerrar Sesión"):
+    for k in ("autenticado", "usuario", "rol", "nombre"):
+        st.session_state.pop(k, None)
+    st.rerun()
+cambiar_mi_clave()
+
+if st.session_state.get("rol") == "admin":
+    tab_gen, tab_admin = st.tabs(["🎓 Generar presentación", "👥 Administrar usuarios"])
+    with tab_gen:
+        pantalla_generador()
+    with tab_admin:
+        panel_admin()
+else:
+    pantalla_generador()
