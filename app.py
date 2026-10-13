@@ -68,35 +68,36 @@ with st.form("form_presentacion"):
   generar_btn = st.form_submit_button("🚀 Generar y Descargar Presentación")
 
 
-# Función para buscar información y videos en la web
+# Función limpia y segura para buscar información y videos
 @st.cache_data(show_spinner=False)
 def buscar_contenido_y_videos(query):
   texto_info = ""
   videos_encontrados = []
   try:
     with DDGS() as ddgs:
-      res_texto = [r["body"] for r in ddgs.text(query, max_results=5)]
-      if res_texto:
-        texto_info = " ".join(res_texto)
+      # Búsqueda de texto general
+      resultados = ddgs.text(query, max_results=5)
+      if resultados:
+        for r in resultados:
+          if "body" in r:
+            texto_info += r["body"] + " "
 
-      res_yt = [
-          r
-          for r in ddgs.text(
-              f"site:youtube.com watch?v {query}", max_results=3
-          ]
-      ]
-      for v in res_yt:
-        titulo_v = v.get("title", "Video educativo")
-        url_v = v.get("href", "#")
-        videos_encontrados.append({"titulo": titulo_v, "url": url_v})
+      # Búsqueda de videos en YouTube
+      resultados_yt = ddgs.text(f"site:youtube.com {query}", max_results=3)
+      if resultados_yt:
+        for r in resultados_yt:
+          titulo_v = r.get("title", "Video educativo")
+          url_v = r.get("href", "#")
+          videos_encontrados.append({"titulo": titulo_v, "url": url_v})
   except Exception:
     pass
 
-  return (
-      texto_info
-      or f"Contenido académico e investigativo de referencia sobre {query}.",
-      videos_encontrados,
-  )
+  if not texto_info:
+    texto_info = (
+        f"Contenido académico e investigativo de referencia sobre {query}."
+    )
+
+  return texto_info, videos_encontrados
 
 
 if generar_btn:
@@ -143,7 +144,6 @@ if generar_btn:
       barra.progress(90)
       estado.text("📊 Compilando archivo PowerPoint...")
 
-      # Guardar temporalmente en el entorno de ejecución para descarga inmediata
       archivo_salida = f"presentacion_{os.getpid()}.pptx"
       prs.save(archivo_salida)
 
@@ -161,7 +161,6 @@ if generar_btn:
             ),
         )
 
-      # Eliminar archivo del servidor inmediatamente después de habilitar la descarga
       if os.path.exists(archivo_salida):
         os.remove(archivo_salida)
 
