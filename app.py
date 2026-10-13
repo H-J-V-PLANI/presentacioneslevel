@@ -47,8 +47,7 @@ if st.sidebar.button("Cerrar Sesión"):
 st.title("🎓 Generador Universal de Presentaciones Académicas")
 st.write(
     "Escribe **cualquier tema o asignatura** y la app estructurará contenido"
-    " profesional, imágenes ilustrativas y enlaces de YouTube para tus"
-    " diapositivas."
+    " profesional y enlaces de YouTube para tus diapositivas."
 )
 
 with st.form("form_presentacion"):
@@ -67,11 +66,9 @@ with st.form("form_presentacion"):
   generar_btn = st.form_submit_button("🚀 Generar y Descargar Presentación")
 
 
-# Generador de contenido académico rico y dinámico para cualquier tema libre
+# Generador de contenido dinámico adaptado a cualquier tema libre
 def generar_contenido_dinamico(query, total_slides):
   q_limpio = query.strip()
-
-  # Banco de estructuras temáticas dinámicas según la cantidad de diapositivas
   slides_data = []
 
   titulos = [
@@ -85,46 +82,47 @@ def generar_contenido_dinamico(query, total_slides):
       f"8. Conclusiones y Resumen General",
   ]
 
+  # Textos limpios sin el símbolo "•" para evitar duplicados en PowerPoint
   textos = [
       (
-          f"• Origen, contexto histórico y antecedentes principales que dan"
-          f" origen al estudio de {q_limpio}.\n\n• Delimitación del campo de"
+          f"Origen, contexto histórico y antecedentes principales que dan"
+          f" origen al estudio de {q_limpio}.\n\nDelimitación del campo de"
           f" aplicación y relevancia en la actualidad formativa."
       ),
       (
-          f"• Definición teórica y terminología indispensable para"
-          f" comprender la estructura de {q_limpio}.\n\n• Principios"
+          f"Definición teórica y terminología indispensable para"
+          f" comprender la estructura de {q_limpio}.\n\nPrincipios"
           f" fundamentales que rigen esta área de conocimiento y su"
           f" interpretación."
       ),
       (
-          f"• Factores determinantes, componentes estructurales y variables"
-          f" que intervienen directamente en {q_limpio}.\n\n• Relación entre"
+          f"Factores determinantes, componentes estructurales y variables"
+          f" que intervienen directamente en {q_limpio}.\n\nRelación entre"
           f" los elementos teóricos y su comportamiento práctico."
       ),
       (
-          f"• Secuencia de fases operativas, etapas de desarrollo y métodos"
-          f" aplicados en {q_limpio}.\n\n• Estándares de calidad y normas"
+          f"Secuencia de fases operativas, etapas de desarrollo y métodos"
+          f" aplicados en {q_limpio}.\n\nEstándares de calidad y normas"
           f" técnicas recomendadas para su correcta ejecución."
       ),
       (
-          f"• Ejemplos concretos de cómo se implementa {q_limpio} en el"
-          f" entorno profesional o académico.\n\n• Beneficios directos,"
+          f"Ejemplos concretos de cómo se implementa {q_limpio} en el"
+          f" entorno profesional o académico.\n\nBeneficios directos,"
           f" optimización de recursos y resultados esperados."
       ),
       (
-          f"• Análisis crítico de las ventajas competitivas y los principales"
-          f" obstáculos al trabajar con {q_limpio}.\n\n• Estrategias de"
+          f"Análisis crítico de las ventajas competitivas y los principales"
+          f" obstáculos al trabajar con {q_limpio}.\n\nEstrategias de"
           f" solución frente a desafíos técnicos o metodológicos."
       ),
       (
-          f"• Revisión de casos prácticos seleccionados para ilustrar el"
-          f" funcionamiento óptimo de {q_limpio}.\n\n• Evaluación de"
+          f"Revisión de casos prácticos seleccionados para ilustrar el"
+          f" funcionamiento óptimo de {q_limpio}.\n\nEvaluación de"
           f" resultados y lecciones aprendidas en proyectos reales."
       ),
       (
-          f"• Síntesis de los conceptos clave abordados a lo largo de la"
-          f" presentación sobre {q_limpio}.\n\n• Espacio abierto para la"
+          f"Síntesis de los conceptos clave abordados a lo largo de la"
+          f" presentación sobre {q_limpio}.\n\nEspacio abierto para la"
           f" retroalimentación, dudas y debate académico grupal."
       ),
   ]
@@ -135,14 +133,13 @@ def generar_contenido_dinamico(query, total_slides):
         textos[i]
         if i < len(textos)
         else (
-            f"• Profundización técnica y detalles operativos avanzados sobre"
-            f" {q_limpio}.\n\n• Consideraciones esenciales para el dominio"
+            f"Profundización técnica y detalles operativos avanzados sobre"
+            f" {q_limpio}.\n\nConsideraciones esenciales para el dominio"
             f" integral de la materia."
         )
     )
     slides_data.append((t_titulo, t_cuerpo))
 
-  # Enlaces de YouTube orientados al tema
   busqueda_url = q_limpio.replace(" ", "+")
   videos = [
       {
@@ -207,7 +204,7 @@ if generar_btn:
       with open(archivo_salida, "rb") as f:
         st.success(
             "🎉 ¡Tu presentación profesional está lista para descargar con"
-            " contenido impecable!"
+            " formato impecable!"
         )
         st.download_button(
             label="📥 Descargar Presentación (.pptx)",
