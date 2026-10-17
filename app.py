@@ -1,6 +1,7 @@
 import os
 import requests
 import streamlit as st
+from streamlit.errors import StreamlitSecretNotFoundError
 from duckduckgo_search import DDGS
 from pptx import Presentation
 from pptx.util import Inches, Pt
@@ -12,8 +13,64 @@ st.set_page_config(
     layout="centered",
 )
 
-# --- SISTEMA DE LOGIN SENCILLO ---
-CREDENCIALES = {"profesor": "profe2026", "estudiante": "clase2026"}
+# --- INICIO DE SESIÓN ---
+class ErrorAutenticacion(Exception):
+  pass
+
+
+def obtener_configuracion_supabase():
+  try:
+    url = os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL", "")
+    clave = os.environ.get("SUPABASE_ANON_KEY") or st.secrets.get(
+        "SUPABASE_ANON_KEY", ""
+    )
+  except StreamlitSecretNotFoundError:
+    return "", ""
+  return url.rstrip("/"), clave
+
+
+def solicitar_autenticacion_supabase(endpoint, datos):
+  url, clave = obtener_configuracion_supabase()
+  respuesta = requests.post(
+      f"{url}/auth/v1/{endpoint}",
+      headers={"apikey": clave, "Content-Type": "application/json"},
+      json=datos,
+      timeout=20,
+  )
+
+  try:
+    resultado = respuesta.json()
+  except requests.exceptions.JSONDecodeError as error:
+    raise ErrorAutenticacion(
+        "El servicio de autenticación devolvió una respuesta no válida."
+    ) from error
+
+  if not respuesta.ok:
+    mensaje = (
+        resultado.get("msg")
+        or resultado.get("message")
+        or resultado.get("error_description")
+        or resultado.get("error")
+        or f"Error del servicio de autenticación (HTTP {respuesta.status_code})."
+    )
+    raise ErrorAutenticacion(str(mensaje))
+
+  return resultado
+
+
+def obtener_nombre_usuario(resultado, correo):
+  usuario = resultado.get("user") or resultado
+  metadatos = usuario.get("user_metadata") or {}
+  return metadatos.get("full_name") or correo.split("@", maxsplit=1)[0]
+
+
+SUPABASE_URL, SUPABASE_ANON_KEY = obtener_configuracion_supabase()
+if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+  st.error(
+      "Falta configurar Supabase. Añade SUPABASE_URL y SUPABASE_ANON_KEY "
+      "en Secrets de Streamlit Cloud. Consulta README.md."
+  )
+  st.stop()
 
 if "autenticado" not in st.session_state:
   st.session_state.autenticado = False
@@ -21,21 +78,43 @@ if "autenticado" not in st.session_state:
 if not st.session_state.autenticado:
   st.title("🔐 Acceso a la Plataforma Educativa")
   st.write(
-      "Inicia sesión para generar tus presentaciones y recursos didácticos."
+      "Ingresa con el correo y la contraseña que te proporcionó el administrador."
   )
 
   with st.form("login_form"):
-    user = st.text_input("Usuario")
-    password = st.text_input("Contraseña", type="password")
+    correo_ingreso = st.text_input("Correo electrónico")
+    contrasena_ingreso = st.text_input("Contraseña", type="password")
     entrar = st.form_submit_button("Ingresar")
 
     if entrar:
-      if user in CREDENCIALES and CREDENCIALES[user] == password:
+      try:
+        resultado = solicitar_autenticacion_supabase(
+            "token?grant_type=password",
+            {
+                "email": correo_ingreso.strip().lower(),
+                "password": contrasena_ingreso,
+            },
+        )
         st.session_state.autenticado = True
-        st.session_state.usuario = user
+        st.session_state.usuario = obtener_nombre_usuario(
+            resultado, correo_ingreso.strip()
+        )
         st.rerun()
-      else:
-        st.error("Usuario o contraseña incorrectos.")
+      except ErrorAutenticacion as error:
+        mensaje = str(error)
+        if "invalid login credentials" in mensaje.lower():
+          mensaje = "Correo electrónico o contraseña incorrectos."
+        elif "email not confirmed" in mensaje.lower():
+          mensaje = (
+              "La cuenta aún no está confirmada. Contacta al administrador."
+          )
+        st.error(mensaje)
+      except requests.RequestException:
+        st.error(
+            "No se pudo conectar con el servicio de autenticación. "
+            "Inténtalo de nuevo más tarde."
+        )
+
   st.stop()
 
 # --- APLICACIÓN PRINCIPAL ---
@@ -83,7 +162,7 @@ def buscar_contenido_y_videos(query):
           r
           for r in ddgs.text(
               f"site:youtube.com watch?v {query}", max_results=3
-          ]
+          )
       ]
       for v in res_yt:
         titulo_v = v.get("title", "Video educativo")
